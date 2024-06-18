@@ -1,3 +1,5 @@
+import uuid
+
 import streamlit as st
 import zipfile
 import os
@@ -26,30 +28,50 @@ st.set_page_config(
 
 # Streamlit app title and description
 st.title("AlphaFold Server CIF to PDB Converter")
-st.write(
+st.markdown(
     """
-    Welcome to the AlphaFold Server CIF to PDB Converter!
-    This app allows you to upload ZIP files, downloaded from the AlphaFold server (containing .cif files),
-    extracts the contents, converts the .cif files to .pdb format, and re-zips everything for download.
-    """
+    Welcome to the **AlphaFold Server CIF to PDB Converter!**
+    This app allows you to upload one or more ZIP files, downloaded from the [AlphaFold server](https://alphafoldserver.com/),
+    extracts the contents, converts the **.cif** files to **.pdb** format, and then re-zips everything for download.
+    """, unsafe_allow_html=True
 )
+
+if 'uploaded_files_key' not in st.session_state:
+    st.session_state['uploaded_files_key'] = str(uuid.uuid4())
+
 # File uploader
-uploaded_files = st.file_uploader("Upload ZIP files containing .cif files", type="zip", accept_multiple_files=True)
+uploaded_files = st.file_uploader("Upload Alpha Fold Server ZIPs",
+                                  type="zip",
+                                  accept_multiple_files=True,
+                                  key=st.session_state['uploaded_files_key'])
 output_folder_name = st.text_input("Output folder name", "converted_files.zip")
 
-if uploaded_files:
+btn_empty = st.empty()
+
+if not uploaded_files:
+    st.warning("Please upload one or more ZIP files")
+
+
+if btn_empty.button("Convert", use_container_width=True, disabled=not uploaded_files):
     progress_text = st.empty()
-    progress_bar = st.progress(0)
+
+    progress_bar_frame = st.empty()
+    progress_bar = progress_bar_frame.progress(0)
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
+
+        extract_path = temp_dir_path / "extracted_files"
+
+        # make the dir
+        extract_path.mkdir(exist_ok=True)
 
         # Process each uploaded ZIP file
         total_files = len(uploaded_files)
         for i, uploaded_file in enumerate(uploaded_files):
             progress_text.text(f"Processing file {i + 1} of {total_files}")
             zip_name = Path(uploaded_file.name).stem
-            zip_extract_path = temp_dir_path / zip_name
+            zip_extract_path = extract_path / zip_name
             zip_extract_path.mkdir(exist_ok=True)
 
             with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
@@ -64,32 +86,30 @@ if uploaded_files:
 
             # Update progress bar
             progress_bar.progress((i + 1) / total_files)
+            time.sleep(0.5)
+
+        progress_bar_frame.empty()
+        progress_text.empty()
 
         # Show spinning wheel
         with st.spinner('Creating final ZIP file...'):
-            time.sleep(1)  # Simulate some processing time
 
             # Create a final ZIP file containing all converted folders
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_zip:
-                final_output_zip = temp_zip.name
-                with zipfile.ZipFile(final_output_zip, 'w') as zipf:
-                    for folder in temp_dir_path.iterdir():
-                        for file in folder.iterdir():
-                            zipf.write(file, arcname=f"{folder.name}/{file.name}")
+            final_output_zip_path = temp_dir_path / "converted_files.zip"
+            with zipfile.ZipFile(final_output_zip_path, 'w') as zipf:
+                for folder in extract_path.iterdir():
+                    for file in folder.iterdir():
+                        zipf.write(file, arcname=f"{folder.name}/{file.name}")
 
         # Display download link for the ZIP file
-        with open(final_output_zip, "rb") as f:
-            st.download_button(
-                label="Download",
-                data=f,
-                file_name=output_folder_name,
-                mime="application/zip",
-                type='primary',
-                use_container_width=True
-            )
-
-        # Clean up temporary files
-        try:
-            os.remove(final_output_zip)
-        except PermissionError:
-            st.error(f"Permission denied while trying to remove {final_output_zip}")
+        with open(final_output_zip_path, "rb") as f:
+            if btn_empty.download_button(
+                    label="Download",
+                    data=f,
+                    file_name=output_folder_name,
+                    mime="application/zip",
+                    type='primary',
+                    use_container_width=True
+            ):
+                st.session_state['uploaded_files_key'] = str(uuid.uuid4())
+                st.rerun()
