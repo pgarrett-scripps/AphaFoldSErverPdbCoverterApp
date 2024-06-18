@@ -39,20 +39,35 @@ st.markdown(
 if 'uploaded_files_key' not in st.session_state:
     st.session_state['uploaded_files_key'] = str(uuid.uuid4())
 
+if 'file_name_key' not in st.session_state:
+    st.session_state['file_name_key'] = str(uuid.uuid4())
+
+if 'converting' not in st.session_state:
+    st.session_state['converting'] = False
+
 # File uploader
 uploaded_files = st.file_uploader("Upload Alpha Fold Server ZIPs",
                                   type="zip",
                                   accept_multiple_files=True,
-                                  key=st.session_state['uploaded_files_key'])
-output_folder_name = st.text_input("Output folder name", "converted_files.zip")
+                                  key=st.session_state['uploaded_files_key'],
+                                  disabled=st.session_state['converting'])
+
+output_folder_name = st.text_input("Output folder name",
+                                   "converted_files.zip",
+                                   key=st.session_state['file_name_key'],
+                                   disabled=st.session_state['converting'])
 
 btn_empty = st.empty()
 
 if not uploaded_files:
     st.warning("Please upload one or more ZIP files")
 
-
 if btn_empty.button("Convert", use_container_width=True, disabled=not uploaded_files):
+    st.session_state['converting'] = True
+    st.rerun()
+
+if st.session_state['converting']:
+    st.session_state['converting'] = False
     progress_text = st.empty()
 
     progress_bar_frame = st.empty()
@@ -112,4 +127,5 @@ if btn_empty.button("Convert", use_container_width=True, disabled=not uploaded_f
                     use_container_width=True
             ):
                 st.session_state['uploaded_files_key'] = str(uuid.uuid4())
+                st.session_state['file_name_key'] = str(uuid.uuid4())
                 st.rerun()
